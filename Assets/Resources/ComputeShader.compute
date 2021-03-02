@@ -1,0 +1,156 @@
+// Each #kernel tells which function to compile; you can have many kernels
+
+struct Neuron
+{
+    float p_prev;
+    int in_start;
+    int spiked;
+    float last_spike_time;
+};
+
+struct Synapse
+{
+    int in_neuron_buffer_index; // this is also the index used by the weights buffer
+    float time;
+};
+
+const float sim_time; //incremented in Update
+
+// neuron properties
+float p_in;
+const float p_min;
+const float p_thresh;
+const float p_rest;
+const float p_refract;
+const float leak;
+
+// learning properties
+const float no_stdp_window;
+const float a_minus;
+const float a_plus;
+const float tau_minus;
+const float tau_plus;
+const float learning_rate;
+const float weight_min;
+const float weight_max;
+
+// defines how a neuron indexes into synapses buffer
+const int synapses_to_keep;
+
+// synapses_to_keep incoming synapses for each neuron, in a circular buffer
+RWStructuredBuffer<Synapse> synapse_buffer;
+// keeps track of which index to overwrite in the synapse_buffer to implement a circular buffer that persists across simulation steps
+RWStructuredBuffer<int> synapse_write_index_buffer;
+
+// neurons
+RWStructuredBuffer<Neuron> neuron_buffer;
+
+// incoming neuron ids (e.g. neuron_buffer[in_neuron_buffer[this_neuron.in_start]] is the first incoming neuron
+StructuredBuffer<int> in_neuron_buffer;
+
+// incoming neuron weights, with same indexing as in_neurons_buffer
+RWStructuredBuffer<int> weight_buffer;
+
+#pragma kernel calc
+[numthreads(64, 1, 1)]
+void calc(uint3 id : SV_DispatchThreadID){
+    const uint neuron_index = id.x;
+    const Neuron this_neuron = neuron_buffer[neuron_index];
+    const int in_start = this_neuron.in_start;
+
+    // there is nothing to do if the neuron has no inputs
+    if (in_neuron_buffer[in_start] < 0)
+    {
+        return;
+    }
+
+    uint next_neuron_index = neuron_index + 1;
+    const int in_end = neuron_buffer[next_neuron_index].in_start;
+
+    const uint synapses_start = synapses_to_keep * neuron_index;
+    const uint synapses_end = synapses_to_keep * (neuron_index + 1);
+
+    const float dt = sim_time - this_neuron.last_spike_time;
+
+    float p_in = 0;
+    uint in_neuron_index;
+    for (int in_neuron_buffer_index = in_start; in_neuron_buffer_index < in_end; in_neuron_buffer_index++)
+    {
+        in_neuron_index = in_neuron_buffer[in_neuron_buffer_index];
+        if (neuron_buffer[in_neuron_index].spiked > 0)
+        {
+            // if the in neuron spiked, add its weight contribution
+            p_in += weight_buffer[in_neuron_buffer_index];
+
+            int synapse_write_index = synapse_write_index_buffer[neuron_index];
+            synapse_buffer[synapse_write_index].in_neuron_buffer_index = in_neuron_buffer_index;
+            synapse_buffer[synapse_write_index].time = sim_time;
+            // rotate back to overwrite the beginning of the circular buffer if this is the end
+            if (synapse_write_index == synapses_to_keep - 1)
+            {
+                synapse_write_index_buffer[neuron_index] = 0;
+            }
+            else
+            {
+                synapse_write_index_buffer[neuron_index] += 1;
+            }
+
+            // STDP with the last spike, dt is always positive, this will always be depression
+            if (dt  >= no_stdp_window)
+            {
+                float weight_delta = a_plus * exp(dt / tau_plus);
+                float weight_old = weight_buffer[in_neuron_buffer_index];
+                weight_buffer[in_neuron_buffer_index] += learning_rate * weight_delta * (weight_old - weight_min);
+            }
+        }
+    }
+
+    // calculate new potential
+    const float p_prev = this_neuron.p_prev;
+    float p;
+
+    if (p_prev < p_min)
+    {
+        p = p_rest;
+    }
+    if (p_prev > p_thresh)
+    {
+        neuron_buffer[neuron_index].spiked = 0;
+        p = p_refract;
+    }
+    if (p_prev > p_min && p_prev < p_thresh)
+    {
+        p = p_prev + p_in - leak;
+    }
+
+    neuron_buffer[neuron_index].p_prev = p;
+
+    if (p > p_thresh)
+    {
+        // spike if above threshold
+        neuron_buffer[neuron_index].spiked = 1;
+
+        // STDP with the presynaptic spikes leading up to this spike, dt is always negative, this will always be potentiation
+        Synapse synapse;
+        float synapse_dt;
+        float weight_old;
+        for (uint synapse_buffer_index = synapses_start; synapse_buffer_index < synapses_end; synapse_buffer_index++)
+        {
+            synapse = synapse_buffer[synapse_buffer_index];
+
+            if (synapse.time > this_neuron.last_spike_time) // ignore synapses older than the previous spike
+            {
+                synapse_dt = synapse.time - sim_time;
+                weight_old = weight_buffer[synapse.in_neuron_buffer_index];
+
+                if (synapse_dt <= -no_stdp_window)
+                {
+                    float weight_delta = a_minus * exp(dt / tau_minus);
+                    weight_buffer[synapse.in_neuron_buffer_index] += learning_rate * weight_delta * (weight_max - weight_old);
+                    
+                }
+            }
+        }
+        neuron_buffer[neuron_index].last_spike_time = sim_time;
+    }
+}
