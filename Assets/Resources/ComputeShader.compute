@@ -1,3 +1,4 @@
+#pragma enable_d3d11_debug_symbols
 // Each #kernel tells which function to compile; you can have many kernels
 
 struct Neuron
@@ -49,7 +50,8 @@ RWStructuredBuffer<Neuron> neuron_buffer;
 StructuredBuffer<int> in_neuron_buffer;
 
 // incoming neuron weights, with same indexing as in_neurons_buffer
-RWStructuredBuffer<int> weight_buffer;
+RWStructuredBuffer<float> weight_buffer;
+RWStructuredBuffer<float> weight_delta_buffer;
 
 #pragma kernel calc
 [numthreads(64, 1, 1)]
@@ -98,7 +100,7 @@ void calc(uint3 id : SV_DispatchThreadID){
             // STDP with the last spike, dt is always positive, this will always be depression
             if (dt  >= no_stdp_window)
             {
-                float weight_delta = a_plus * exp(dt / tau_plus);
+                float weight_delta = a_plus * exp(-dt/tau_plus);
                 float weight_old = weight_buffer[in_neuron_buffer_index];
                 weight_buffer[in_neuron_buffer_index] += learning_rate * weight_delta * (weight_old - weight_min);
             }
@@ -145,7 +147,8 @@ void calc(uint3 id : SV_DispatchThreadID){
 
                 if (synapse_dt <= -no_stdp_window)
                 {
-                    float weight_delta = a_minus * exp(dt / tau_minus);
+                    float weight_delta = -a_minus * exp(dt / tau_minus);
+                    //weight_delta_buffer[in_neuron_buffer_index] = weight_delta;
                     weight_buffer[synapse.in_neuron_buffer_index] += learning_rate * weight_delta * (weight_max - weight_old);
                     
                 }

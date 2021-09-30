@@ -392,20 +392,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2cd847a6b659a6b40942c9d03be17a37, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  p_min: -1
-  p_thresh: 6
+  p_min: -2
+  p_thresh: 5
   p_rest: 0
   p_refract: -1
   leak: 0.1
   no_stdp_window: 2
   a_minus: -0.6
   a_plus: 0.2
-  tau_minus: 5
-  tau_plus: 5
+  tau_minus: 2
+  tau_plus: 2
   learning_rate: 0.2
   weight_min: 0.5
   weight_max: 3
   synapses_to_keep: 10
+  in_neuron_buffer: 
+  weight_buffer: []
   _compute_shader: {fileID: 7200000, guid: 847d9fdb980bd4d43b66340ed97413a2, type: 3}
 --- !u!4 &1933961069
 Transform:

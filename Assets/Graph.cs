@@ -41,7 +41,7 @@ public class Graph : MonoBehaviour
 	    stage = 0;	    
 	  }
 	  if (word == "[" && stage == 0 && currentobject == 2){
-	    stage = 1;
+	    stage = 1;;
 	  }
 	  if (word == "[" && stage == 0 && currentobject == 1){
 	    stage = 1;

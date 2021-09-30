@@ -61,12 +61,16 @@ public class Manager : MonoBehaviour
     public int synapses_to_keep;
 
     public Neuron[] neuron_buffer;
+    public int[] in_neuron_buffer;
+    public float[] weight_buffer;
+    public float[] weight_delta_buffer;
 
     private ComputeBuffer _neuron_buffer;
     private ComputeBuffer _synapse_write_index_buffer;
     private ComputeBuffer _synapse_buffer;
     private ComputeBuffer _in_neuron_buffer;
     private ComputeBuffer _weight_buffer;
+    private ComputeBuffer _weight_delta_buffer;
 
     public ComputeShader _compute_shader;
 
@@ -104,14 +108,15 @@ public class Manager : MonoBehaviour
             foreach(int in_neuron_index in neuron_in_neurons)
             {
                 in_neuron_buffer_list.Add(in_neuron_index);
-                weight_buffer_list.Add(1);
+                weight_buffer_list.Add(1f);
                 in_neuron_count += 1;
             }
             neuron_count += 1;
         }
 
-        int[] in_neuron_buffer = in_neuron_buffer_list.ToArray();
-        float[] weight_buffer = weight_buffer_list.ToArray();
+        in_neuron_buffer = in_neuron_buffer_list.ToArray();
+        weight_buffer = weight_buffer_list.ToArray();
+        weight_delta_buffer = weight_buffer_list.ToArray();
 
         // put data in shader
 
@@ -140,12 +145,14 @@ public class Manager : MonoBehaviour
         _synapse_buffer = new ComputeBuffer(synapse_buffer.Length, sizeof(int) + sizeof(float));
         _in_neuron_buffer = new ComputeBuffer(in_neuron_buffer.Length, sizeof(int));
         _weight_buffer = new ComputeBuffer(weight_buffer.Length, sizeof(float));
+        _weight_delta_buffer = new ComputeBuffer(weight_delta_buffer.Length, sizeof(float));
 
         _neuron_buffer.SetData(neuron_buffer);
         _synapse_write_index_buffer.SetData(synapse_write_index_buffer);
         _synapse_buffer.SetData(synapse_buffer);
         _in_neuron_buffer.SetData(in_neuron_buffer);
         _weight_buffer.SetData(weight_buffer);
+        _weight_delta_buffer.SetData(weight_delta_buffer);
 
         kernel = _compute_shader.FindKernel("calc");
 
@@ -154,6 +161,7 @@ public class Manager : MonoBehaviour
         _compute_shader.SetBuffer(kernel, "synapse_buffer", _synapse_buffer);
         _compute_shader.SetBuffer(kernel, "in_neuron_buffer", _in_neuron_buffer);
         _compute_shader.SetBuffer(kernel, "weight_buffer", _weight_buffer);
+        _compute_shader.SetBuffer(kernel, "weight_delta_buffer", _weight_delta_buffer);
 
         sim_time = 0;
         
@@ -168,10 +176,57 @@ public class Manager : MonoBehaviour
             _neuron_buffer.SetData(neuron_buffer);
             _compute_shader.Dispatch(kernel, 64, 1, 1);
             _neuron_buffer.GetData(neuron_buffer);
+            _weight_buffer.GetData(weight_buffer);
+            _weight_delta_buffer.GetData(weight_delta_buffer);
+
+
             for(int i = 0; i < neuron_buffer.Length; i++)
             {
-                GameObject node = GameObject.Find(i.ToString());
-                node.GetComponent<Node>().spiked = neuron_buffer[i].spiked;
+                Debug.Log("looking for " + i.ToString());
+                GameObject node_object = GameObject.Find(i.ToString());
+                Node node = node_object.GetComponent<Node>();
+                node.spiked = neuron_buffer[i].spiked;
+                node.potential = neuron_buffer[i].p_prev;
+
+                int in_start = neuron_buffer[i].in_start;
+
+                if(in_neuron_buffer[in_start] < 0)
+                {
+                    continue;
+                }
+                if(i + 1 > neuron_buffer.Length - 1)
+                {
+                    continue;
+                }
+
+                int in_end = neuron_buffer[i + 1].in_start;
+
+
+                for(int j = in_start; j < in_end; j++)
+                {
+                    if(i == 0 && j == 0)
+                    {
+                        continue;
+                    }
+
+                    int in_neuron_index = in_neuron_buffer[j];
+
+                    Debug.Log("i " + i.ToString());
+                    Debug.Log("j " + j.ToString());
+                    Debug.Log("in_neuron_index " + in_neuron_index.ToString());
+                    Debug.Log("weight buffer length " + weight_buffer.Length.ToString());
+                    Debug.Log("neuron buffer length " + neuron_buffer.Length.ToString());
+                    float weight = weight_buffer[j];
+                    float weight_delta = weight_delta_buffer[j];
+                    Debug.Log("looking for " + i.ToString() + in_neuron_index.ToString());
+                    GameObject edge_object = GameObject.Find(in_neuron_index.ToString() + i.ToString());
+                    if (!edge_object)
+                    {
+                        continue;
+                    }
+                    edge_object.transform.GetChild(0).GetComponent<TextMesh>().text = weight.ToString() + " " + weight_delta.ToString();
+                    int weights_start = in_neuron_buffer[neuron_buffer[i].in_start];
+                }
             }
 
             sim_time += 1;

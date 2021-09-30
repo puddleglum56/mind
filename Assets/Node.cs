@@ -15,6 +15,7 @@ public class Node : MonoBehaviour
     public Material white;
 
     public int spiked;
+    public float potential;
   
     void Start(){
         spiked = 0;
@@ -32,10 +33,10 @@ public class Node : MonoBehaviour
           Vector3 ls = edge.transform.localScale;
           ls.z = Vector3.Distance(transform.position, target.transform.position);
           edge.transform.localScale = ls;
-          edge.transform.position = new Vector3((transform.position.x+target.transform.position.x)/2,
-                            (transform.position.y+target.transform.position.y)/2,
-                            (transform.position.z+target.transform.position.z)/2);
-          i++;
+          edge.transform.position = new Vector3((transform.position.x+target.transform.position.x)/2, (transform.position.y+target.transform.position.y)/2, (transform.position.z+target.transform.position.z)/2);
+          edge.name = name + target.name;
+          //edge.transform.GetChild(0).GetComponent<TextMesh>().text = edge.name + "   " + "0";
+            i++;
         }
 
         if (spiked > 0)
@@ -45,12 +46,15 @@ public class Node : MonoBehaviour
         {
             GetComponent<Renderer>().material = orange;
         }
+
+        transform.GetChild(0).GetComponent<TextMesh>().text = name + "   " + potential;
     }
 
     private void OnMouseOver()
     {
         if (!Input.GetMouseButtonDown(0)) return;
-        manager.GetComponent<Manager>().neuron_buffer[int.Parse(gameObject.name)].spiked = 1;
+        Manager manager_component = manager.GetComponent<Manager>();
+        manager_component.neuron_buffer[0].spiked = 1; 
 
     }
 
