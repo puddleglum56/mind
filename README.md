@@ -5,4 +5,5 @@ WIP: Simulation and visualization of spiking neural network in Unity, with spiki
 3D graph visualization largely borrowed from: https://github.com/mdaquin/3d_graph_layout_unity
 
 Demo:
+
 <img src="https://github.com/puddleglum56/mind/blob/main/demo.gif" alt="demo" max-height="600"/>
